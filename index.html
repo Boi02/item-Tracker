@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Item Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@300;400;600;700&display=swap">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Item Tracker">
+<meta name="theme-color" content="#fbfaf8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Item Tracker</h1>
+    <div class="ctrls">
+      <label class="cur">Theme
+        <select id="theme" aria-label="Theme">
+          <option value="system">Auto</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      <label class="cur">Currency
+        <select id="cur" aria-label="Currency">
+          <option>RM</option><option>Rp</option><option>$</option><option>S$</option><option>€</option><option>£</option><option>¥</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <section class="summary" aria-label="Summary">
+    <div class="tile total">
+      <div class="label">Total value</div>
+      <div class="value num" id="total">0.00</div>
+    </div>
+    <div class="tile items">
+      <div class="label">Items</div>
+      <div class="value num" id="count">0</div>
+    </div>
+    <div class="tile perday">
+      <div class="label">Cost per day</div>
+      <div class="value num" id="perday">0.00</div>
+      <div class="sub">all items together</div>
+    </div>
+    <div class="tile oldest">
+      <div class="label">Longest owned</div>
+      <div class="value num" id="oldest">–</div>
+      <div class="sub" id="oldestname"></div>
+    </div>
+  </section>
+
+  <form id="form" autocomplete="off" novalidate>
+    <div class="f name"><label class="label" for="name">Item</label><input id="name" type="text" placeholder="e.g. Running shoes" maxlength="80" enterkeyhint="next"></div>
+    <div class="f price"><label class="label" for="price">Price</label><input id="price" type="number" inputmode="decimal" min="0" step="any" placeholder="0.00"></div>
+    <div class="f date"><label class="label" for="date">Date purchased</label><input id="date" type="date"></div>
+    <div class="actions">
+      <button class="btn" type="submit" id="submit">Add item</button>
+      <button class="btn ghost" type="button" id="cancel" hidden>Cancel</button>
+    </div>
+    <p class="err" id="err" role="alert"></p>
+  </form>
+
+  <section aria-label="Items">
+    <div class="listhead">
+      <div class="label" id="listlabel">Your items</div>
+      <label class="sort">Sort
+        <select id="sort" aria-label="Sort items">
+          <option value="new">Newest first</option>
+          <option value="old">Oldest first</option>
+          <option value="price">Highest price</option>
+          <option value="perday">Highest cost per day</option>
+        </select>
+      </label>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <div class="status" id="status" aria-live="polite"></div>
+</div>
+
+<script>
+(function(){
+//<pure>
+function parseDate(s){var p=String(s).split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
+function todayStart(){var n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate());}
+function span(from,to){
+  var y=to.getFullYear()-from.getFullYear(), m=to.getMonth()-from.getMonth(), d=to.getDate()-from.getDate();
+  if(d<0){m--; d+=new Date(to.getFullYear(),to.getMonth(),0).getDate();}
+  if(m<0){y--; m+=12;}
+  return {y:y,m:m,d:d};
+}
+function spanText(sp){
+  var out=[]; if(sp.y)out.push(sp.y+'y'); if(sp.m)out.push(sp.m+'m'); if(sp.d||!out.length)out.push(sp.d+'d');
+  return out.join(' ');
+}
+function metrics(item,now){
+  var from=parseDate(item.date), diff=Math.round((now-from)/864e5);
+  if(diff<0)return {future:true,days:0,perDay:null,text:'Not yet'};
+  var days=diff+1;
+  return {future:false,days:days,perDay:item.price/days,text:diff===0?'Today':spanText(span(from,now))};
+}
+//</pure>
+
+var $=function(id){return document.getElementById(id);};
+var LS='itemtracker.items', CK='itemtracker.currency', DK='itemtracker.draft';
+var PASTELS=['--p-lav','--p-mint','--p-peach','--p-blush','--p-sky','--p-butter'];
+var items=[], coll=null, mode='pending', loaded=false, lastSig='', sort='new', editId=null, cur='RM', armedId=null, armTimer=null;
+var TK='itemtracker.theme', theme='system';
+try{cur=localStorage.getItem(CK)||'RM'; theme=localStorage.getItem(TK)||'system';}catch(e){}
+function applyTheme(t){
+  var r=document.documentElement;
+  if(t==='light'||t==='dark')r.setAttribute('data-theme',t);
+  else if(r.hasAttribute('data-theme')&&theme==='system'&&userPicked)r.removeAttribute('data-theme');
+}
+var userPicked=false;
+if(theme==='light'||theme==='dark')applyTheme(theme);
+
+function lsLoad(){try{return JSON.parse(localStorage.getItem(LS)||'[]');}catch(e){return [];}}
+function lsSave(){try{localStorage.setItem(LS,JSON.stringify(items));}catch(e){}}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+
+/* Unsaved typing is kept so nothing you entered is lost if the page reloads. */
+function draftSave(){
+  if(editId)return;
+  try{localStorage.setItem(DK,JSON.stringify({name:$('name').value,price:$('price').value,date:$('date').value}));}catch(e){}
+}
+function draftClear(){try{localStorage.removeItem(DK);}catch(e){}}
+function draftLoad(){
+  try{
+    var d=JSON.parse(localStorage.getItem(DK)||'null');
+    if(d&&(d.name||d.price)){ $('name').value=d.name||''; $('price').value=d.price||''; if(d.date)$('date').value=d.date; }
+  }catch(e){}
+}
+
+function money(n){
+  var d=(cur==='Rp'||cur==='¥')?0:2;
+  var s=n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+  return (cur.length>1?cur+' ':cur)+s;
+}
+function fmtDate(s){
+  try{return parseDate(s).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}catch(e){return s;}
+}
+function pastelFor(name){
+  var h=0, s=String(name).toLowerCase(); for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
+  return 'var('+PASTELS[h%PASTELS.length]+')';
+}
+function el(tag,cls,text){var e=document.createElement(tag); if(cls)e.className=cls; if(text!=null)e.textContent=text; return e;}
+function setStatus(t){$('status').textContent=t;}
+function setErr(t){$('err').textContent=t||'';}
+
+function cell(cls,label,value,sub){
+  var c=el('div','m '+cls);
+  c.appendChild(el('div','label',label));
+  c.appendChild(el('div','v num',value));
+  if(sub)c.appendChild(el('div','s num',sub));
+  return c;
+}
+
+function render(){
+  var now=todayStart();
+  var list=items.filter(function(i){return i && typeof i.price==='number' && i.date;}).map(function(i){return {item:i,m:metrics(i,now)};});
+
+  var total=0, daily=0, oldest=null;
+  list.forEach(function(x){
+    total+=x.item.price;
+    if(x.m.perDay!=null)daily+=x.m.perDay;
+    if(!x.m.future && (!oldest || x.m.days>oldest.m.days))oldest=x;
+  });
+  $('total').textContent=money(total);
+  $('count').textContent=String(list.length);
+  $('perday').textContent=money(daily);
+  $('oldest').textContent=oldest?oldest.m.text:'–';
+  $('oldestname').textContent=oldest?oldest.item.name:'';
+  $('listlabel').textContent=list.length===1?'1 item':'Your items';
+
+  var sorters={
+    'new':function(a,b){return parseDate(b.item.date)-parseDate(a.item.date);},
+    'old':function(a,b){return parseDate(a.item.date)-parseDate(b.item.date);},
+    'price':function(a,b){return b.item.price-a.item.price;},
+    'perday':function(a,b){return (b.m.perDay||0)-(a.m.perDay||0);}
+  };
+  list.sort(sorters[sort]);
+
+  var box=$('list'); box.textContent='';
+  if(!loaded){
+    box.appendChild(el('div','empty','Loading your items…'));
+    return;
+  }
+  if(!list.length){
+    box.appendChild(el('div','empty','Nothing here yet. Add an item above with its price and the day you bought it, and this list will show how long you have had it and what it has cost per day.'));
+    return;
+  }
+  list.forEach(function(x){
+    var it=x.item, m=x.m;
+    var row=el('div','row');
+    var main=el('div','main');
+    var av=el('div','av',(it.name||'?').trim().charAt(0).toUpperCase()); av.style.background=pastelFor(it.name); av.setAttribute('aria-hidden','true');
+    main.appendChild(av);
+    var who=el('div','who');
+    who.appendChild(el('div','title',it.name));
+    who.appendChild(el('div','when num','Bought '+fmtDate(it.date)));
+    main.appendChild(who);
+    row.appendChild(main);
+    row.appendChild(cell('used','Used for',m.text,m.future?'':m.days+(m.days===1?' day':' days')));
+    row.appendChild(cell('paid','Price',money(it.price)));
+    row.appendChild(cell('perday','Cost per day',m.perDay==null?'–':money(m.perDay)));
+    var tools=el('div','tools');
+    var ed=el('button','link','Edit'); ed.type='button'; ed.addEventListener('click',function(){startEdit(it.id);});
+    var del=el('button','link danger',armedId===it.id?'Confirm delete':'Delete'); del.type='button';
+    if(armedId===it.id)del.classList.add('armed');
+    del.addEventListener('click',function(){onDelete(it.id);});
+    tools.appendChild(ed); tools.appendChild(del);
+    row.appendChild(tools);
+    box.appendChild(row);
+  });
+}
+
+function iso(d){
+  var m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return d.getFullYear()+'-'+m+'-'+day;
+}
+function resetForm(){
+  editId=null;
+  $('name').value=''; $('price').value=''; $('date').value=iso(todayStart());
+  $('submit').textContent='Add item'; $('cancel').hidden=true; setErr('');
+}
+function startEdit(id){
+  var it=items.filter(function(i){return i.id===id;})[0]; if(!it)return;
+  editId=id; $('name').value=it.name; $('price').value=it.price; $('date').value=it.date;
+  $('submit').textContent='Save changes'; $('cancel').hidden=false; setErr('');
+  $('form').scrollIntoView({behavior:'smooth',block:'center'}); $('name').focus();
+}
+function cancelEdit(){resetForm(); draftLoad();}
+
+async function onSubmit(ev){
+  ev.preventDefault();
+  var name=$('name').value.trim(), price=parseFloat($('price').value), date=$('date').value;
+  if(!name){setErr('Give the item a name.');$('name').focus();return;}
+  if(!isFinite(price)||price<0){setErr('Enter the price you paid, 0 or more.');$('price').focus();return;}
+  if(!date){setErr('Pick the date you bought it.');$('date').focus();return;}
+  setErr('');
+  var data={name:name,price:price,date:date};
+  if(mode==='cloud'){
+    try{
+      if(editId){
+        var old=items.filter(function(i){return i.id===editId;})[0]||{};
+        var body=Object.assign({},old,data); delete body.id;
+        await coll.doc(editId).set(body);
+      }else{
+        await coll.doc().set(Object.assign({createdAt:Date.now()},data));
+      }
+    }catch(e){setErr('Could not save. Your entry is still here, try again.');return;}
+  }else{
+    if(editId){items=items.map(function(i){return i.id===editId?Object.assign({},i,data):i;});}
+    else{items.push(Object.assign({id:uid(),createdAt:Date.now()},data));}
+    lsSave(); render();
+  }
+  draftClear(); resetForm();
+}
+
+async function onDelete(id){
+  if(armedId!==id){
+    armedId=id; clearTimeout(armTimer);
+    armTimer=setTimeout(function(){armedId=null;render();},3500);
+    render(); return;
+  }
+  clearTimeout(armTimer); armedId=null;
+  if(editId===id)resetForm();
+  if(mode==='cloud'){
+    try{await coll.doc(id).delete();}catch(e){setErr('Could not delete. Try again.');render();}
+  }else{
+    items=items.filter(function(i){return i.id!==id;}); lsSave(); render();
+  }
+}
+
+function goLocal(){
+  mode='local'; coll=null; loaded=true; items=lsLoad(); render();
+  setStatus('Saved in this browser only.');
+}
+
+async function init(){
+  $('cur').value=cur; $('theme').value=theme;
+  resetForm(); draftLoad(); render();
+  if(!window.claude||!window.claude.use){goLocal();return;}
+  var timer=setTimeout(function(){if(!loaded)setStatus('Still reaching your saved items…');},10000);
+  try{
+    var res=await Promise.all([claude.use('db'),claude.use('user')]);
+    var db=res[0], user=res[1];
+    var id=user?await user.id():null;
+    clearTimeout(timer);
+    if(!db||!id){goLocal();return;}
+    coll=db.collection('data/users/'+id);
+    mode='cloud';
+    setStatus('Saved to your account. Only you can see these items.');
+    coll.onSnapshot(function(snap){
+      /* A cached empty answer is not the real list yet: wait for the store. */
+      if(snap.metadata&&snap.metadata.fromCache&&snap.empty&&!loaded)return;
+      var next=snap.docs.map(function(d){return Object.assign({},d.data(),{id:d.id});});
+      var sig=JSON.stringify(next.map(function(i){return [i.id,i.name,i.price,i.date];}).sort());
+      var first=!loaded; loaded=true;
+      setStatus('Saved to your account. Only you can see these items.');
+      if(sig===lastSig&&!first)return; /* unchanged: leave the screen alone */
+      lastSig=sig; items=next; render();
+    },function(){goLocal();});
+  }catch(e){clearTimeout(timer);goLocal();}
+}
+
+$('form').addEventListener('submit',onSubmit);
+$('form').addEventListener('input',draftSave);
+$('cancel').addEventListener('click',cancelEdit);
+$('sort').addEventListener('change',function(e){sort=e.target.value;render();});
+$('cur').addEventListener('change',function(e){
+  cur=e.target.value; try{localStorage.setItem(CK,cur);}catch(x){} render();
+});
+$('theme').addEventListener('change',function(e){
+  theme=e.target.value; userPicked=true;
+  try{localStorage.setItem(TK,theme);}catch(x){}
+  applyTheme(theme);
+});
+init();
+})();
+</script>
+</body>
+</html>

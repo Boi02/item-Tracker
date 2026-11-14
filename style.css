@@ -1,0 +1,118 @@
+/* Layout: one quiet column sized for a 402pt-wide phone. Pastel tiles for the summary, a plain add form, then a ruled list with a pastel initial per item. */
+:root{
+  --bg:#fbfaf8; --fg:#25262b; --muted:#76777f; --line:#ebe9e4; --field:#f3f1ee;
+  --accent:#5b5f97; --accent-fg:#ffffff; --danger:#b4443a;
+  --p-lav:#e6e1f6; --p-mint:#d9f0e5; --p-peach:#fde3d4; --p-blush:#fbdce6; --p-sky:#d9e8f8; --p-butter:#fbf0cb;
+  --font:'Nunito Sans','Avenir Next',Avenir,'Helvetica Neue',Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141416; --fg:#ececf1; --muted:#9a9ba5; --line:#2a2a2f; --field:#1d1d21;
+    --accent:#b9b7f2; --accent-fg:#16161c; --danger:#ee9a90;
+    --p-lav:#2f2c45; --p-mint:#24372f; --p-peach:#42312a; --p-blush:#422c36; --p-sky:#25354a; --p-butter:#413b25;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141416; --fg:#ececf1; --muted:#9a9ba5; --line:#2a2a2f; --field:#1d1d21;
+  --accent:#b9b7f2; --accent-fg:#16161c; --danger:#ee9a90;
+  --p-lav:#2f2c45; --p-mint:#24372f; --p-peach:#42312a; --p-blush:#422c36; --p-sky:#25354a; --p-butter:#413b25;
+  color-scheme:dark;
+}
+/* Basics the host page normally provides */
+:root{color-scheme:light; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg); font-family:var(--font); font-size:15px; line-height:1.5;
+  padding-block:28px 56px; touch-action:manipulation;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap{max-width:760px; margin:0 auto; display:flex; flex-direction:column; gap:32px}
+.num{font-variant-numeric:tabular-nums}
+
+header{display:flex; justify-content:space-between; align-items:center; gap:12px 16px; flex-wrap:wrap}
+.ctrls{display:flex; gap:8px 14px; flex-wrap:wrap}
+h1{margin:0; font-size:13px; font-weight:700; letter-spacing:.14em; text-transform:uppercase}
+.cur{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px}
+
+select,input,button{font:inherit; color:inherit}
+select,input{
+  background:var(--field); border:1px solid transparent; border-radius:12px; padding:0 14px; min-height:48px; min-width:0; width:100%;
+  font-size:16px;
+}
+input[type="date"]{-webkit-appearance:none; appearance:none; text-align:left}
+select{width:auto; min-height:40px; padding:0 10px; border-radius:10px}
+input::placeholder{color:var(--muted)}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+/* Summary */
+.summary{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px}
+.tile{border-radius:18px; padding:16px 18px; min-width:0; color:var(--fg)}
+.tile.total{grid-column:1 / -1; background:var(--p-lav); padding:20px 20px 22px}
+.tile.items{background:var(--p-mint)}
+.tile.perday{background:var(--p-peach)}
+.tile.oldest{background:var(--p-sky)}
+.label{font-size:12px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase}
+.tile .label{color:inherit; opacity:.7}
+.tile .value{font-weight:600; font-size:22px; line-height:1.2; margin-top:6px; overflow-wrap:anywhere}
+.tile.total .value{font-size:clamp(34px, 9.5vw, 54px); font-weight:300; letter-spacing:-.01em; line-height:1.1}
+.tile .sub{font-size:13px; opacity:.7; margin-top:2px; overflow-wrap:anywhere}
+
+/* Form */
+form{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end}
+.f{display:flex; flex-direction:column; gap:6px; min-width:0}
+.f.name{flex:2 1 220px}
+.f.price{flex:1 1 120px}
+.f.date{flex:1 1 150px}
+.actions{display:flex; gap:8px; flex:0 0 auto}
+.btn{
+  border:0; border-radius:12px; padding:0 22px; min-height:48px; cursor:pointer; font-weight:700; font-size:16px;
+  background:var(--accent); color:var(--accent-fg);
+}
+.btn.ghost{background:transparent; color:var(--muted); border:1px solid var(--line)}
+.err{flex-basis:100%; min-height:1.2em; color:var(--danger); font-size:13px; margin:0}
+
+/* List */
+.listhead{display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:10px; gap:12px}
+.sort{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px}
+.row{
+  display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3, minmax(0,1fr)) auto; gap:12px 16px;
+  align-items:start; padding:18px 0; border-bottom:1px solid var(--line);
+}
+.main{display:flex; gap:12px; align-items:center; min-width:0}
+.av{
+  flex:0 0 40px; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:16px; color:var(--fg);
+}
+.who{min-width:0}
+.row .title{font-weight:700; overflow-wrap:anywhere; line-height:1.3}
+.row .when{font-size:13px; color:var(--muted)}
+.m{min-width:0}
+.m .label{font-size:11px; margin-bottom:2px}
+.m .v{overflow-wrap:anywhere}
+.m .s{font-size:12px; color:var(--muted)}
+.m.perday .v{display:inline-block; font-weight:700; background:var(--p-mint); border-radius:999px; padding:1px 10px}
+.tools{display:flex; gap:2px; justify-content:flex-end}
+.link{background:none; border:0; padding:0 12px; min-height:44px; cursor:pointer; color:var(--muted); font-size:14px; border-radius:10px}
+.link:hover{color:var(--fg)}
+.link.danger.armed{color:var(--danger); font-weight:700; background:var(--p-blush)}
+.empty{padding:40px 0; color:var(--muted); max-width:46ch}
+.status{font-size:12px; color:var(--muted)}
+
+/* iPhone-width layout (402pt wide) */
+@media (max-width:640px){
+  .tile.items,.tile.perday{grid-column:span 1}
+  .summary{grid-template-columns:repeat(2, minmax(0,1fr))}
+  .tile.oldest{grid-column:1 / -1}
+  .f.name,.f.price,.f.date{flex:1 1 100%}
+  .actions{flex:1 1 100%}
+  .btn{flex:1}
+  .row{grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px 12px}
+  .row .main{grid-column:1 / -1}
+  .tools{grid-column:1 / -1; justify-content:flex-start; margin-left:-12px}
+  .m .v{font-size:14px}
+  select{font-size:16px}
+}
